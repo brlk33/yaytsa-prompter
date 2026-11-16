@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="../web/">
+  <title>Суфлёр — как в приложении Яйца Cloud 1.5</title>
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // Pretends to be the Android app: its User-Agent and the YaytsaAndroid.speech bridge,
+    // which "hears" the open script phrase by phrase, with a retake after ~30 words.
+    Object.defineProperty(navigator, 'userAgent', { get: () => 'Mozilla/5.0 (Linux; Android 14) Chrome/130 Mobile YaytsaCloudAndroid/1.5' });
+    window.FAKE = { started: 0, stopped: 0, lang: '' };
+    window.YaytsaAndroid = {
+      post() {},
+      speech(raw) {
+        const m = JSON.parse(raw);
+        if (m.type === 'stop') { FAKE.stopped++; clearInterval(FAKE.t); return; }
+        FAKE.started++; FAKE.lang = m.lang;
+        const id = location.hash.split('/')[1];
+        const text = JSON.parse(localStorage.getItem('sufler.text.' + id) || '""');
+        const words = text.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w) && !/[\[\]#]/.test(w));
+        const seq = words.slice(0, 30).concat(words.slice(8, 60));
+        const send = d => dispatchEvent(new CustomEvent('yaytsa-app', { detail: d }));
+        send({ type: 'speech-state', state: 'on' });
+        let i = 0, phrase = [];
+        FAKE.t = setInterval(() => {
+          if (i >= seq.length) return;
+          phrase.push(seq[i++]);
+          const final = phrase.length >= 7;
+          send({ type: 'speech', text: phrase.join(' '), final });
+          if (final) phrase = [];
+        }, 120);
+      },
+    };
+  </script>
+</head>
+<body>
+  <main id="view"></main>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
