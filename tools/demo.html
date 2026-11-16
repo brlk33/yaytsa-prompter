@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <base href="../web/">
+  <title>Суфлёр — демо с ненастоящим микрофоном</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Inter:wght@400;500;600&family=PT+Serif:wght@400;700&display=swap">
+  <link rel="stylesheet" href="style.css">
+  <script>
+    // A fake recognizer that "reads" the open script at speaking pace: some words dropped or
+    // misheard, an ad-lib, and a retake (after ~45 words it starts the second sentence again).
+    window.FAKE_LOG = [];
+    class FakeRec {
+      start() {
+        const id = location.hash.split('/')[1];
+        const text = JSON.parse(localStorage.getItem('sufler.text.' + id) || '""');
+        const words = text.split(/\s+/).filter(w => /[\p{L}\p{N}]/u.test(w) && !/[\[\]]/.test(w));
+        let seq = words.slice(0, 45);
+        seq = seq.concat(['так', 'стоп', 'давайте', 'ещё', 'раз']).concat(words.slice(12, 120));
+        seq.splice(30, 0, 'ну', 'короче', 'вот', 'смотрите', 'это', 'очень', 'важно');
+        let i = 0, said = [];
+        this.onstart?.();
+        this.t = setInterval(() => {
+          if (i >= seq.length) return;
+          let w = seq[i++];
+          if (Math.random() < 0.1) return;
+          if (Math.random() < 0.08) w = 'эээ';
+          said.push(w);
+          window.FAKE_LOG.push(i);
+          const tr = said.slice(-14).join(' ');
+          this.onresult?.({ results: [[{ transcript: tr }]] });
+        }, 380);
+      }
+      abort() { clearInterval(this.t); }
+      stop() { clearInterval(this.t); }
+    }
+    window.webkitSpeechRecognition = window.SpeechRecognition = FakeRec;
+  </script>
+</head>
+<body>
+  <main id="view"></main>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

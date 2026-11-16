@@ -1,0 +1,70 @@
+<!doctype html><meta charset="utf-8"><title>align test</title><pre id="out"></pre>
+<script type="module">
+import { tokenize, Tracker, normWord } from '../web/align.js';
+const out = document.getElementById('out');
+const log = s => { out.textContent += s + '\n'; };
+const base = `Сегодня мы поговорим о том, как устроена память человека. Память — это не склад, где всё лежит на полках. Это скорее процесс, который каждый раз заново собирает воспоминание из кусочков.
+Учёные долго считали, что воспоминания хранятся в одном месте мозга. Но эксперименты показали обратное: следы памяти распределены по всей коре. Когда вы вспоминаете запах бабушкиных пирогов, работают сразу несколько областей.
+Есть три главных этапа: кодирование, хранение и извлечение. На каждом этапе что-то может пойти не так. Поэтому мы иногда уверенно помним то, чего никогда не было.
+Давайте разберём каждый этап подробнее и посмотрим, как применить это в учёбе и работе.`;
+// non-repeating text: made-up words of random syllables plus common short words
+const syl = ['ка', 'ро', 'ми', 'на', 'ле', 'то', 'ва', 'ус', 'пре', 'ст', 'ди', 'мо', 'ар', 'кен', 'бу', 'ри', 'зо', 'ла', 'ты', 'же'];
+let sd = 3; const r2 = () => (sd = (sd * 48271) % 2147483647) / 2147483647;
+const small = ['и', 'в', 'на', 'что', 'это', 'не', 'с', 'как', 'мы', 'о'];
+const text = Array.from({ length: 1800 }, (_, k) => (r2() < 0.3 ? small[(r2() * small.length) | 0]
+  : Array.from({ length: 2 + ((r2() * 3) | 0) }, () => syl[(r2() * syl.length) | 0]).join(''))
+  + (k % 11 === 10 ? '.' : '') + (k % 60 === 59 ? '\n' : '')).join(' ');
+void base;
+const { words } = tokenize(text);
+let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const junk = ['ну', 'вот', 'значит', 'короче', 'типа', 'смотрите', 'кстати', 'пример', 'друзья', 'камера'];
+function speak(tr, seq, onStep) {
+  let heard = [];
+  for (const w of seq) { heard.push(w); onStep(tr.update(heard.slice(-16)), heard.length); }
+}
+function noisy(from, to) {
+  const seq = [];
+  for (let i = from; i < to; i++) {
+    const r = rnd(); const w = words[i].norm;
+    if (r < 0.12) continue;                                  // dropped by recognizer
+    if (r < 0.2) { seq.push(junk[(rnd() * junk.length) | 0]); continue; } // misheard
+    if (r < 0.3 && w.length > 5) { seq.push(w.slice(0, -2) + 'ой'); continue; } // other ending
+    seq.push(w);
+  }
+  return seq;
+}
+// 1: straight reading with noise
+{ const tr = new Tracker(words); let backs = 0;
+  speak(tr, noisy(0, 600), r => { if (r && r.kind === 'retake') backs++; });
+  log(`1 straight: pos ${tr.pos}/599, false retakes ${backs}`); }
+// 2: ad-libs in the middle
+{ const tr = new Tracker(words); let backs = 0, maxPos = 0;
+  const seq = noisy(0, 200).concat(Array.from({ length: 40 }, () => junk[(rnd() * junk.length) | 0]), 'а', 'теперь', 'давайте', 'про', 'память', 'и', 'мозг', 'человека', noisy(200, 300));
+  speak(tr, seq, r => { if (r && r.kind === 'retake') backs++; });
+  log(`2 ad-lib: pos ${tr.pos}/299, false retakes ${backs}`); }
+// 3: retake: read 0..150, then start again at the sentence starting near 100
+{ const tr = new Tracker(words);
+  speak(tr, noisy(0, 150), () => {});
+  let s = 100; while (!words[s].sent) s--;
+  let jumpedAt = -1;
+  speak(tr, noisy(s, s + 40), (r, n) => { if (r && r.kind === 'retake' && jumpedAt < 0) jumpedAt = n; });
+  log(`3 retake from sentence ${s}: pos ${tr.pos} (expected ~${s + 39}), jumped after word #${jumpedAt}`); }
+// 4: skip a paragraph forward
+{ const tr = new Tracker(words);
+  speak(tr, noisy(0, 80), () => {});
+  speak(tr, noisy(160, 200), () => {});
+  log(`4 skip ahead: pos ${tr.pos} (expected ~199)`); }
+// 5: paraphrase: the key words of sentences 2..4 ahead in another order with other words around
+{ const tr = new Tracker(words);
+  speak(tr, noisy(0, 50), () => {});
+  const p0 = tr.pos;
+  let s = p0 + 1; while (!words[s].sent) s++;
+  const keys = words.slice(s, s + 30).map(w => w.norm).filter(w => w.length >= 6);
+  const seq = [];
+  keys.forEach(k => seq.push(junk[(rnd() * junk.length) | 0], k.slice(0, -1) + 'ы', junk[(rnd() * junk.length) | 0]));
+  speak(tr, seq, () => {});
+  log(`5 paraphrase: from ${p0} moved to ${tr.pos} (paraphrased words ${s}..${s + 29})`); }
+// timing
+{ const tr = new Tracker(words); tr.pos = 1000; const h = noisy(1000, 1016); const t = performance.now();
+  for (let k = 0; k < 100; k++) tr.update(h); log(`update: ${((performance.now() - t) / 100).toFixed(2)} ms, ${words.length} words`); }
+</script>
