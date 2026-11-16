@@ -293,3 +293,27 @@ input[type="range"] { flex: 1; accent-color: var(--accent); height: 28px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
+
+/* focus chunk: the next sentence(s) bright, the text after it dimmer, the read text faint */
+.text.hl { color: var(--p-ahead); }
+.text.hl span.f { color: var(--p-text); }
+.text.hl span.r { color: var(--p-read); }
+:root { --p-ahead: rgba(55, 53, 47, 0.55); }
+:root[data-theme="dark"] { --p-ahead: rgba(255, 255, 255, 0.5); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --p-ahead: rgba(255, 255, 255, 0.5); } }
+
+.size-btn { font: 600 15px/1 var(--font); width: 34px; }
+.size-btn.big { font-size: 19px; }
+.size-btn sup { font-size: 0.6em; margin-left: 1px; }
+
+/* landscape phone: low screen, so thin bars and a smaller play button */
+@media (orientation: landscape) and (max-height: 520px) {
+  .top-bar { padding-top: 4px; padding-bottom: 4px; }
+  .bottom-bar { padding-top: 4px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+  .play { width: 46px; height: 46px; }
+  .play .ic { width: 20px; height: 20px; }
+  .pill { height: 36px; }
+  .bar-title b { font-size: 13px; }
+  .fade.bottom { height: 10%; }
+  .sheet { max-height: 94dvh; }
+}

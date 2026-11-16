@@ -1,6 +1,6 @@
 # Tiny static server for local testing: .\tools\serve.ps1 [port]  -> http://localhost:8765/web/
-param([int]$Port = 8765)
-$root = Split-Path $PSScriptRoot -Parent
+param([int]$Port = 8765, [string]$Root = "")
+$root = if ($Root) { (Resolve-Path $Root).Path } else { Split-Path $PSScriptRoot -Parent }
 $types = @{ '.html'='text/html; charset=utf-8'; '.js'='text/javascript; charset=utf-8'; '.css'='text/css; charset=utf-8'; '.png'='image/png'; '.json'='application/json'; '.webmanifest'='application/manifest+json'; '.txt'='text/plain; charset=utf-8'; '.svg'='image/svg+xml' }
 $l = New-Object System.Net.HttpListener
 $l.Prefixes.Add("http://localhost:$Port/")

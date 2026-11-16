@@ -16,7 +16,7 @@ const store = {
 const DEFAULTS = {
   theme: 'auto', font: 'golos', size: 0, line: 1.5, margin: 6, readLine: 32, smooth: 'soft',
   mirror: false, mode: 'voice', wpm: 130, lang: 'auto', retakes: true, back: 600, wake: true, fullscreen: true,
-  uiLang: '',
+  uiLang: '', highlight: 'sentence',
 };
 const settings = Object.assign({}, DEFAULTS, store.get('sufler.settings', {}));
 if (!settings.size) settings.size = Math.round(Math.min(46, Math.max(28, Math.min(innerWidth, 900) / 11)));
@@ -74,6 +74,13 @@ const EN = {
   'Шрифт': 'Font',
   'Линия чтения': 'Reading line',
   'Плавность': 'Smoothness',
+  'Выделять': 'Highlight',
+  'Фразу': 'Sentence',
+  'Две фразы': 'Two sentences',
+  'Абзац': 'Paragraph',
+  'Нет': 'Off',
+  'Меньше текст': 'Smaller text',
+  'Больше текст': 'Larger text',
   'Мягко': 'Soft',
   'Средне': 'Medium',
   'Быстро': 'Quick',
@@ -367,6 +374,8 @@ function renderPrompter(script) {
     <header class="bar top-bar">
       <a class="icon-btn" href="#" aria-label="${T('Назад')}">${icon('back')}</a>
       <div class="bar-title"><b>${esc(script.title)}</b><span class="status" id="status"></span></div>
+      <button class="icon-btn size-btn" id="smaller" aria-label="${T('Меньше текст')}">A<sup>−</sup></button>
+      <button class="icon-btn size-btn big" id="larger" aria-label="${T('Больше текст')}">A<sup>+</sup></button>
       <button class="icon-btn" id="open-settings" aria-label="${T('Настройки')}">${icon('sliders')}</button>
     </header>
     <footer class="bar bottom-bar">
@@ -433,11 +442,35 @@ function renderPrompter(script) {
   const readY = () => stage.clientHeight * settings.readLine / 100;
   const target = () => readY() - anchor(mode === 'speed' ? posF : pos + 1);
 
-  const markRead = upto => {
-    if (upto === shown) return;
+  // The chunk to read next is bright, the text after it a little dimmer, so the eye has a
+  // clear block to hold on to: the rest of the sentence, two sentences, or the paragraph.
+  let focus = [0, -1];
+  const focusEnd = from => {
+    if (from >= N) return N - 1;
+    const hl = settings.highlight;
+    if (hl === 'para') { let j = from; while (j + 1 < N && words[j + 1].para === words[from].para) j++; return j; }
+    let j = from, ends = hl === 'two' ? 2 : 1;
+    while (j + 1 < N) { if (words[j + 1].sent && --ends === 0) break; j++; }
+    // a very short rest of a sentence: take the next one too
+    if (hl === 'sentence' && j - from < 4) { j++; while (j + 1 < N && !words[j + 1].sent) j++; }
+    return Math.min(N - 1, j);
+  };
+  const markFocus = from => {
+    const on = settings.highlight !== 'none';
+    textEl.classList.toggle('hl', on);
+    const [a, b] = focus;
+    for (let i = a; i <= b; i++) spans[i]?.classList.remove('f');
+    if (!on) { focus = [0, -1]; return; }
+    const e = focusEnd(from);
+    for (let i = from; i <= e; i++) spans[i].classList.add('f');
+    focus = [from, e];
+  };
+  const markRead = (upto, force) => {
+    if (upto === shown && !force) return;
     if (upto > shown) for (let i = Math.max(0, shown + 1); i <= upto && i < N; i++) spans[i].classList.add('r');
     else for (let i = Math.max(0, upto + 1); i <= shown && i < N; i++) spans[i].classList.remove('r');
     shown = upto;
+    markFocus(upto + 1);
     const p = N ? Math.max(0, upto + 1) / N : 0;
     $('#prog').style.width = `${p * 100}%`;
     const left = Math.max(0, N - upto - 1) / Math.max(60, mode === 'speed' ? settings.wpm : wpm);
@@ -683,6 +716,15 @@ function renderPrompter(script) {
 
   /* settings sheet */
   $('#open-settings').addEventListener('click', e => { e.stopPropagation(); openSheet(); });
+  const resize = d => {
+    settings.size = Math.max(18, Math.min(80, settings.size + d));
+    saveSettings();
+    applyLook();
+    relayout();
+    toast(`${settings.size}px`, 900);
+  };
+  $('#smaller').addEventListener('click', () => resize(-2));
+  $('#larger').addEventListener('click', () => resize(2));
   function openSheet(helpFirst = false) {
     const wrap = $('#sheet');
     const sheet = $('.sheet', wrap);
@@ -711,6 +753,7 @@ function renderPrompter(script) {
         <h3>${T('Листать')}</h3>
         <div class="set col">${seg('mode', [['voice', T('По голосу')], ['speed', T('С постоянной скоростью')]])}</div>
         <div class="set" data-show="speed"><span>${T('Слов в минуту')}</span>${range('wpm', 60, 220, 5)}</div>
+        <div class="set col"><span>${T('Выделять')}</span>${seg('highlight', [['sentence', T('Фразу')], ['two', T('Две фразы')], ['para', T('Абзац')], ['none', T('Нет')]])}</div>
         <div class="set col"><span>${T('Плавность')}</span>${seg('smooth', [['soft', T('Мягко')], ['medium', T('Средне')], ['fast', T('Быстро')]])}</div>
         <div class="set col" data-show="voice"><span>${T('Язык речи')}</span>${seg('lang', [['auto', T('Авто')], ['ru-RU', 'Русский'], ['en-US', 'English']])}</div>
         <div data-show="voice">${toggle('retakes', T('Дубли'), T('Сам возвращаться назад, когда начинаю отрывок заново'))}</div>
@@ -760,6 +803,7 @@ function renderPrompter(script) {
         segEl.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
         saveSettings();
         if (k === 'theme') applyTheme();
+        if (k === 'highlight') markRead(pos, true);
         if (k === 'font') { applyLook(); document.fonts?.ready.then(relayout); relayout(); }
         if (k === 'mode') {
           const was = running;
